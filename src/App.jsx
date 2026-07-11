@@ -8,6 +8,7 @@ import SpectrumPlot from './components/SpectrumPlot.jsx'
 import WavelengthBand from './components/WavelengthBand.jsx'
 import { useMolecules } from './hooks/useMolecules.js'
 import { useSpectrum } from './hooks/useSpectrum.js'
+import { WAVELENGTH_DOMAIN } from './lib/spectra.js'
 
 export default function App() {
   const { molecules, error: databaseError, loading } = useMolecules()
@@ -18,7 +19,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedId && molecules.length) {
-      setSelectedId(molecules.some((molecule) => molecule.id === 'VUCVUN') ? 'VUCVUN' : molecules[0].id)
+      setSelectedId(molecules[0].id)
     }
   }, [molecules, selectedId])
 
@@ -57,7 +58,7 @@ export default function App() {
               <p className="eyebrow">Selected molecule</p>
               <h1>{selected?.chemical_formula.unicode || (loading ? 'Loading library…' : 'No molecule')}</h1>
               <div className="molecule-meta">
-                {selected && <><i className="live-dot" /> CSD {selected.id}<span>·</span>{(1239.841984 / selected.x_max).toFixed(0)}–{(1239.841984 / selected.x_min).toFixed(0)} nm</>}
+                {selected && <><i className="live-dot" /> CSD {selected.id}<span>·</span>{WAVELENGTH_DOMAIN[0]}–{WAVELENGTH_DOMAIN[1]} nm view</>}
               </div>
             </div>
             <ModeToggle mode={mode} onChange={setMode} />

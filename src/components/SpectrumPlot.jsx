@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatY, prepareTracks, TRACKS } from '../lib/spectra.js'
+import { formatY, prepareTracks, TRACKS, WAVELENGTH_DOMAIN } from '../lib/spectra.js'
 
 const PAD = { left: 58, right: 12, top: 29, bottom: 36 }
 
@@ -14,9 +14,15 @@ function nearestIndex(values, target) {
   return Math.max(0, Math.min(values.length - 1, low))
 }
 
-function getWavelengthDomain(prepared) {
-  if (!prepared?.wavelengths.length) return [200, 1000]
-  return [prepared.wavelengths[0], prepared.wavelengths[prepared.wavelengths.length - 1]]
+function valueAtWavelength(wavelengths, values, target) {
+  const last = wavelengths.length - 1
+  if (target < wavelengths[0] || target > wavelengths[last]) return 0
+  const upper = nearestIndex(wavelengths, target)
+  if (upper === 0 || wavelengths[upper] === target) return values[upper]
+  const lower = upper - 1
+  const span = wavelengths[upper] - wavelengths[lower]
+  const mix = span ? (target - wavelengths[lower]) / span : 0
+  return values[lower] + (values[upper] - values[lower]) * mix
 }
 
 export default function SpectrumPlot({ spectrum, mode, loading, error }) {
@@ -47,7 +53,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     let lastDraw = 0
     const plotWidth = size.width - PAD.left - PAD.right
     const plotHeight = size.height - PAD.top - PAD.bottom
-    const [waveMin, waveMax] = getWavelengthDomain(prepared)
+    const [waveMin, waveMax] = WAVELENGTH_DOMAIN
     const verticalScale = mode === 'pdf' ? 1 : 0.9
 
     const xFor = (lambda) => PAD.left + ((lambda - waveMin) / (waveMax - waveMin)) * plotWidth
@@ -93,20 +99,22 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
         TRACKS.forEach((track, trackNumber) => {
           const values = prepared.tracks[track.key]
           const wavelengths = prepared.wavelengths
-          const step = Math.max(1, Math.floor(values.length / Math.max(500, plotWidth * 1.3)))
+          const pixelStep = Math.max(1, plotWidth / Math.max(500, plotWidth * 1.3))
           const wobblePhase = timestamp * 0.0008 + trackNumber * 2.1
           context.beginPath()
-          let started = false
-          for (let i = 0; i < values.length; i += step) {
-            const lambda = wavelengths[i]
-            if (lambda < waveMin || lambda > waveMax) continue
-            const x = xFor(lambda)
-            const baseY = yFor(values[i])
-            const strength = values[i] / (prepared.max || 1)
-            const wobble = reducedMotion ? 0 : Math.sin(lambda * 0.052 + wobblePhase) * (0.45 + strength * 1.4)
-            if (!started) { context.moveTo(x, baseY + wobble); started = true }
-            else context.lineTo(x, baseY + wobble)
+          for (let offset = 0; offset <= plotWidth; offset += pixelStep) {
+            const lambda = waveMin + (offset / plotWidth) * (waveMax - waveMin)
+            const value = valueAtWavelength(wavelengths, values, lambda)
+            const strength = value / (prepared.max || 1)
+            const wobble = reducedMotion || strength <= 0.005
+              ? 0
+              : Math.sin(lambda * 0.052 + wobblePhase) * (0.45 + strength * 1.4)
+            const x = PAD.left + offset
+            const y = yFor(value) + wobble
+            if (offset === 0) context.moveTo(x, y)
+            else context.lineTo(x, y)
           }
+          context.lineTo(PAD.left + plotWidth, yFor(valueAtWavelength(wavelengths, values, waveMax)))
           context.strokeStyle = track.color
           context.lineWidth = trackNumber === 0 ? 1.35 : 1.55
           context.setLineDash(track.dash ? [4, 5] : [])
@@ -142,19 +150,18 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     if (localX < PAD.left || localX > rect.width - PAD.right || localY < PAD.top || localY > rect.height - PAD.bottom) {
       setHover(null); return
     }
-    const [waveMin, waveMax] = getWavelengthDomain(prepared)
+    const [waveMin, waveMax] = WAVELENGTH_DOMAIN
     const lambda = waveMin + ((localX - PAD.left) / plotWidth) * (waveMax - waveMin)
-    const index = nearestIndex(prepared.wavelengths, lambda)
     const plotHeight = rect.height - PAD.top - PAD.bottom
     const verticalScale = mode === 'pdf' ? 1 : 0.9
     let closest = null
     TRACKS.forEach((track) => {
-      const value = prepared.tracks[track.key][index]
+      const value = valueAtWavelength(prepared.wavelengths, prepared.tracks[track.key], lambda)
       const y = PAD.top + plotHeight - (value / prepared.max) * plotHeight * verticalScale
       const distance = Math.abs(y - localY)
       if (!closest || distance < closest.distance) closest = { ...track, trackKey: track.key, value, y, distance }
     })
-    setHover({ ...closest, lambda: prepared.wavelengths[index], x: localX, color: closest.color })
+    setHover({ ...closest, lambda, x: localX, color: closest.color })
   }
 
   const tooltipLeft = hover ? Math.min(size.width - 90, Math.max(92, hover.x)) : 0

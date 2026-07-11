@@ -6,6 +6,8 @@ export const TRACKS = [
 
 export const POINTS_PER_TRACK = 5000
 export const HC_EV_NM = 1239.841984
+export const WAVELENGTH_DOMAIN = [100, 900]
+
 export function decodeSpectrum(buffer, metadata) {
   const expectedBytes = TRACKS.length * POINTS_PER_TRACK * Float32Array.BYTES_PER_ELEMENT
   if (buffer.byteLength !== expectedBytes) {
@@ -75,6 +77,6 @@ export function wavelengthToColor(wavelength) {
 
 export function formatY(value, mode) {
   if (!Number.isFinite(value)) return '—'
-  if (mode === 'pdf') return value < 0.001 ? value.toExponential(2) : value.toFixed(4)
+  if (mode === 'pdf') return Math.abs(value) < 0.0005 ? '0.000' : value.toFixed(3)
   return value >= 100 ? value.toExponential(2) : value.toFixed(3)
 }
