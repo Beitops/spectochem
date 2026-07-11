@@ -68,6 +68,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
   // The animation reads hoverRef without restarting its effect on every pointer
   // move; hover state separately drives the React tooltip.
   const hoverRef = useRef(null)
+  const activeTouchPointerRef = useRef(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState(null)
   const [visibleTrack, setVisibleTrack] = useState(null)
@@ -265,6 +266,28 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
     })
   }
 
+  function handlePointerDown(event) {
+    if (event.pointerType !== 'mouse') {
+      activeTouchPointerRef.current = event.pointerId
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    handlePointer(event)
+  }
+
+  function handlePointerMove(event) {
+    if (event.pointerType !== 'mouse' && activeTouchPointerRef.current !== event.pointerId) return
+    handlePointer(event)
+  }
+
+  function handlePointerEnd(event) {
+    if (activeTouchPointerRef.current !== event.pointerId) return
+    activeTouchPointerRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    updateHover(null)
+  }
+
   function toggleTrack(trackKey) {
     setVisibleTrack((current) => current === trackKey ? null : trackKey)
     updateHover(null)
@@ -286,7 +309,16 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
           </button>
         ))}
       </div>
-      <canvas ref={canvasRef} className="spectrum-canvas" onPointerMove={handlePointer} onPointerDown={handlePointer} onPointerLeave={(event) => { if (event.pointerType !== 'touch') updateHover(null) }} aria-label="Interactive molecular spectrum plot" />
+      <canvas
+        ref={canvasRef}
+        className="spectrum-canvas"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onPointerLeave={(event) => { if (event.pointerType === 'mouse') updateHover(null) }}
+        aria-label="Interactive molecular spectrum plot"
+      />
       {loading && <div className="spectrum-loading">Resolving spectrum…</div>}
       {error && <div className="spectrum-loading">{error.message}</div>}
       {hover && (
