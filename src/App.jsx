@@ -76,6 +76,7 @@ export default function App() {
           <div className="stage-header">
             <div className="molecule-heading">
               <p className="eyebrow">Selected molecule</p>
+              <div className="molecule-name">{selected?.name || (selected ? `CSD compound ${selected.id}` : '')}</div>
               <h1>{selected?.chemical_formula.unicode || (loading ? 'Loading library…' : 'No molecule')}</h1>
               <div className="molecule-meta">
                 {selected && (

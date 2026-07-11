@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react'
 import { formatY, prepareTracks, TRACKS, WAVELENGTH_DOMAIN } from '../lib/spectra.js'
 
 // Reserve canvas space for tick labels and axis titles.
@@ -62,16 +63,32 @@ function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
 
 export default function SpectrumPlot({ spectrum, mode, loading, error }) {
   const canvasRef = useRef(null)
+  const drawRef = useRef(null)
   // The animation reads hoverRef without restarting its effect on every pointer
   // move; hover state separately drives the React tooltip.
   const hoverRef = useRef(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState(null)
+  const [visibleTrack, setVisibleTrack] = useState(null)
   const prepared = useMemo(() => prepareTracks(spectrum, mode), [spectrum, mode])
+  const { refs, floatingStyles } = useFloating({
+    open: Boolean(hover),
+    placement: 'right-start',
+    strategy: 'fixed',
+    middleware: [
+      offset(14),
+      flip({ fallbackPlacements: ['left-start', 'right-end', 'left-end'] }),
+      shift({ padding: 10 }),
+    ],
+    whileElementsMounted: autoUpdate,
+  })
 
   function updateHover(nextHover) {
     hoverRef.current = nextHover
     setHover(nextHover)
+    // Once the entrance animation has settled, pointer changes still need one
+    // canvas redraw to update the highlighted curve and marker.
+    if (drawRef.current) requestAnimationFrame(drawRef.current)
   }
 
   useEffect(() => {
@@ -98,7 +115,8 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const context = canvas.getContext('2d')
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
-    let lastDraw = 0
+    const animationStarted = performance.now()
+    const animationDuration = 900
     const plotWidth = size.width - PAD.left - PAD.right
     const plotHeight = size.height - PAD.top - PAD.bottom
     const [waveMin, waveMax] = WAVELENGTH_DOMAIN
@@ -110,12 +128,10 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const sampledTracks = sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor)
 
     function draw(timestamp = 0) {
-      // Cap the animated chart near 26 fps; the underlying data is static.
-      if (!reducedMotion && timestamp - lastDraw < 38) {
-        frame = requestAnimationFrame(draw)
-        return
-      }
-      lastDraw = timestamp
+      const rawProgress = reducedMotion ? 1 : Math.min(1, (timestamp - animationStarted) / animationDuration)
+      // Cubic easing gives the new spectrum a quick, confident start and a
+      // gentle finish without continuously animating scientific data.
+      const revealProgress = 1 - Math.pow(1 - Math.max(0, rawProgress), 3)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
       context.clearRect(0, 0, size.width, size.height)
 
@@ -149,17 +165,16 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       if (sampledTracks.length) {
         const activeHover = hoverRef.current
         sampledTracks.forEach((track) => {
-          // Add a subtle visual shimmer only; point.y remains the true value.
-          const wobblePhase = timestamp * 0.0008 + track.trackNumber * 2.1
+          if (visibleTrack && track.key !== visibleTrack) return
+          context.save()
+          context.beginPath()
+          context.rect(PAD.left, PAD.top - 20, plotWidth * revealProgress, plotHeight + 40)
+          context.clip()
           context.beginPath()
           for (let index = 0; index < track.points.length; index += 1) {
             const point = track.points[index]
-            const wobble = reducedMotion || point.strength <= 0.005
-              ? 0
-              : Math.sin(point.wavePhase + wobblePhase) * (0.45 + point.strength * 1.4)
-            const y = point.y + wobble
-            if (index === 0) context.moveTo(point.x, y)
-            else context.lineTo(point.x, y)
+            if (index === 0) context.moveTo(point.x, point.y)
+            else context.lineTo(point.x, point.y)
           }
           context.lineTo(PAD.left + plotWidth, track.endY)
           context.strokeStyle = track.color
@@ -170,6 +185,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
           context.globalAlpha = activeHover && activeHover.trackKey !== track.key ? 0.35 : 0.9
           context.stroke()
           context.globalAlpha = 1; context.shadowBlur = 0; context.setLineDash([])
+          context.restore()
         })
       }
 
@@ -184,11 +200,15 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
         context.beginPath(); context.arc(x, y, 3.2, 0, Math.PI * 2); context.fill(); context.shadowBlur = 0
       }
 
-      if (!reducedMotion) frame = requestAnimationFrame(draw)
+      if (rawProgress < 1) frame = requestAnimationFrame(draw)
     }
-    draw()
-    return () => cancelAnimationFrame(frame)
-  }, [prepared, mode, size])
+    drawRef.current = draw
+    frame = requestAnimationFrame(draw)
+    return () => {
+      cancelAnimationFrame(frame)
+      drawRef.current = null
+    }
+  }, [prepared, mode, size, visibleTrack])
 
   function handlePointer(event) {
     if (!prepared) return
@@ -206,29 +226,46 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const verticalScale = mode === 'pdf' ? 1 : 0.9
     // At the pointer wavelength, select whichever track is vertically closest.
     let closest = null
-    TRACKS.forEach((track) => {
+    TRACKS.filter((track) => !visibleTrack || track.key === visibleTrack).forEach((track) => {
       const value = valueAtWavelength(prepared.wavelengths, prepared.tracks[track.key], lambda)
       const y = PAD.top + plotHeight - (value / prepared.max) * plotHeight * verticalScale
       const distance = Math.abs(y - localY)
       if (!closest || distance < closest.distance) closest = { ...track, trackKey: track.key, value, y, distance }
     })
     updateHover({ ...closest, lambda, x: localX, color: closest.color })
+    // A virtual reference lets Floating UI place the panel next to the actual
+    // pointer while flip/shift keep it clear of both the cursor and viewport.
+    refs.setPositionReference({
+      getBoundingClientRect: () => new DOMRect(event.clientX, event.clientY, 0, 0),
+    })
   }
 
-  // Clamp the tooltip so it remains inside the chart on narrow screens.
-  const tooltipLeft = hover ? Math.min(size.width - 90, Math.max(92, hover.x)) : 0
-  const tooltipTop = hover ? Math.max(106, hover.y) : 0
+  function toggleTrack(trackKey) {
+    setVisibleTrack((current) => current === trackKey ? null : trackKey)
+    updateHover(null)
+  }
 
   return (
     <div className="chart-section">
       <div className="legend">
-        {TRACKS.map((track) => <span className="legend-item" key={track.key}><i className="legend-line" style={{ background: track.color, color: track.color }} />{track.label}</span>)}
+        {TRACKS.map((track) => (
+          <button
+            type="button"
+            className={`legend-item ${visibleTrack && visibleTrack !== track.key ? 'muted' : 'active'}`}
+            key={track.key}
+            onClick={() => toggleTrack(track.key)}
+            aria-pressed={visibleTrack === track.key}
+            title={visibleTrack === track.key ? 'Show all models' : `Show only ${track.label}`}
+          >
+            <i className="legend-line" style={{ background: track.color, color: track.color }} />{track.label}
+          </button>
+        ))}
       </div>
-      <canvas ref={canvasRef} className="spectrum-canvas" onPointerMove={handlePointer} onPointerLeave={() => updateHover(null)} aria-label="Interactive molecular spectrum plot" />
+      <canvas ref={canvasRef} className="spectrum-canvas" onPointerMove={handlePointer} onPointerDown={handlePointer} onPointerLeave={(event) => { if (event.pointerType !== 'touch') updateHover(null) }} aria-label="Interactive molecular spectrum plot" />
       {loading && <div className="spectrum-loading">Resolving spectrum…</div>}
       {error && <div className="spectrum-loading">{error.message}</div>}
       {hover && (
-        <div className="spectrum-tooltip" style={{ left: tooltipLeft, top: tooltipTop }}>
+        <div ref={refs.setFloating} className="spectrum-tooltip" style={floatingStyles}>
           <div className="tooltip-track" style={{ color: hover.color }}><i className="live-dot" style={{ background: hover.color }} />{hover.label}</div>
           <div className="tooltip-grid">
             <span>λ</span><strong>{hover.lambda.toFixed(2)} nm</strong>

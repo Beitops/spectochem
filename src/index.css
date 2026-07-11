@@ -376,13 +376,23 @@ svg {
   min-width: 0;
 }
 .molecule-heading h1 {
-  margin: 5px 0 1px;
+  margin: 0 0 1px;
   overflow: hidden;
   color: var(--ink);
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(27px, 3vw, 42px);
   font-weight: 400;
   letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.molecule-name {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 580;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -464,6 +474,23 @@ svg {
   gap: 6px;
   color: var(--ink-soft);
   font-size: 10px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s, transform 0.2s;
+}
+.legend-item:hover,
+.legend-item[aria-pressed="true"] {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.05);
+}
+.legend-item:active {
+  transform: scale(0.96);
+}
+.legend-item.muted {
+  opacity: 0.35;
 }
 .legend-line {
   width: 18px;
@@ -488,7 +515,6 @@ svg {
   text-transform: uppercase;
 }
 .spectrum-tooltip {
-  position: absolute;
   z-index: 15;
   min-width: 164px;
   padding: 10px 12px;
@@ -497,8 +523,8 @@ svg {
   background: rgba(5, 12, 10, 0.95);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
   pointer-events: none;
-  transform: translate(-50%, calc(-100% - 14px));
   backdrop-filter: blur(12px);
+  animation: tooltip-in 0.16s var(--ease-out);
 }
 .tooltip-track {
   display: flex;
@@ -561,7 +587,6 @@ svg {
     transparent 42%,
     rgba(0, 0, 0, 0.3)
   );
-  animation: band-shimmer 6s ease-in-out infinite alternate;
 }
 .band-labels {
   display: grid;
@@ -760,11 +785,8 @@ svg {
     transform: scale(0.8);
   }
 }
-@keyframes band-shimmer {
-  to {
-    transform: translateX(3%);
-    opacity: 0.65;
-  }
+@keyframes tooltip-in {
+  from { opacity: 0; }
 }
 @keyframes breathe {
   50% {
