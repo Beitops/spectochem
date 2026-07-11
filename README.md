@@ -1,6 +1,6 @@
 # SpectoChem visualizer
 
-An interactive React/Vite frontend for exploring predicted UV–Vis–NIR spectra and rotating 3D molecular structures. The included database contains 2,112 compounds, three 5,000-point spectrum tracks per compound, RDKit MolBlocks, formulas, SMILES, wavelength bounds, and JSD metrics.
+An interactive React/Vite frontend for exploring predicted UV–Vis–NIR spectra and rotating 3D molecular structures. The included database contains 2,112 compounds, three 5,000-point spectrum tracks per compound, on-demand RDKit MolBlocks, formulas, SMILES, wavelength bounds, and JSD metrics.
 
 ## Run the website
 
@@ -35,5 +35,5 @@ Output is written to `public/data` by default. Each `.bin` file contains three s
 - `src/components` — spectrum canvas, wavelength band and beam, 3D viewer, database, dialogs
 - `src/hooks` — metadata and binary spectrum loading
 - `src/lib/spectra.js` — binary decoding, wavelength conversion, PDF normalization
-- `src/variables.css` — the complete visual token set
+- `src/variables.css` — shared visual tokens
 - `scripts/export_spectra.py` — repaired Python export pipeline

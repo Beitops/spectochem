@@ -189,8 +189,10 @@ def process_all_molecules(preds: Dict[str, Dict], jsd_store: Dict[str, np.ndarra
     """Pathway 1: Creates raw high-density float32 individual binary matrices for frontend fetch calls."""
     print("\nProcessing Pathway 1: Exporting 5k vectors to streamlined individual binary assets...")
     mol_dir = output_dir / "molecules"
+    molblock_dir = output_dir / "molblocks"
     spec_dir = output_dir / "spectrums"
     mol_dir.mkdir(parents=True, exist_ok=True)
+    molblock_dir.mkdir(parents=True, exist_ok=True)
     spec_dir.mkdir(parents=True, exist_ok=True)
 
     metadata = {}
@@ -213,6 +215,13 @@ def process_all_molecules(preds: Dict[str, Dict], jsd_store: Dict[str, np.ndarra
             save_molecule_vector_svg(raw_mol, mol_dir / f"{csd_code}.svg")
         except Exception:
             pass
+
+        # Keep large 3D structures out of the startup index. The frontend only
+        # downloads the structure for the currently selected compound.
+        encoded_molblock = molblock.encode("utf-8")
+        with open(molblock_dir / f"{csd_code}.bin", "wb") as f:
+            f.write(len(encoded_molblock).to_bytes(4, "little"))
+            f.write(encoded_molblock)
 
         local_preds = {m: (m_data['l_pred'][idx], m_data['f_pred'][idx]) for m, m_data in preds.items()}
         local_jsds = {m: float(jsd_store[m][idx]) for m in preds.keys()}
@@ -248,7 +257,6 @@ def process_all_molecules(preds: Dict[str, Dict], jsd_store: Dict[str, np.ndarra
                 "ascii": ascii_formula
             },
             "smiles": smiles_str,
-            "molblock": molblock,
             "x_min": float(x_min),
             "x_max": float(x_max),
             "jsd": local_jsds

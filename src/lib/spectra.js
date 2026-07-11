@@ -38,21 +38,29 @@ export function decodeSpectrum(buffer, metadata) {
 export function prepareTracks(spectrum, mode) {
   if (!spectrum) return null
   const { wavelengths, tracks } = spectrum
-  const prepared = {}
   let globalMax = 0
 
+  if (mode !== 'pdf') {
+    TRACKS.forEach(({ key }) => {
+      const values = tracks[key]
+      for (let i = 0; i < values.length; i += 1) {
+        if (values[i] > globalMax) globalMax = values[i]
+      }
+    })
+    return { wavelengths, tracks, max: globalMax || 1 }
+  }
+
+  const prepared = {}
   TRACKS.forEach(({ key }) => {
     const source = tracks[key]
-    let divisor = 1
-    if (mode === 'pdf') {
-      // Shape mode in the reference visualizer compares the profile of each
-      // model independently, with every track's highest point set to 1.
-      let trackMax = 0
-      for (let i = 0; i < source.length; i += 1) {
-        if (source[i] > trackMax) trackMax = source[i]
-      }
-      divisor = trackMax || 1
+    let trackMax = 0
+    for (let i = 0; i < source.length; i += 1) {
+      if (source[i] > trackMax) trackMax = source[i]
     }
+
+    // Shape mode compares each model profile independently, with every
+    // track's highest point set to 1.
+    const divisor = trackMax || 1
     const values = new Float32Array(source.length)
     for (let i = 0; i < source.length; i += 1) {
       values[i] = source[i] / divisor

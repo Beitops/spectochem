@@ -25,17 +25,54 @@ function valueAtWavelength(wavelengths, values, target) {
   return values[lower] + (values[upper] - values[lower]) * mix
 }
 
+function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
+  if (!prepared) return []
+
+  const pixelStep = Math.max(1, plotWidth / Math.max(500, plotWidth * 1.3))
+  return TRACKS.map((track, trackNumber) => {
+    const points = []
+    const values = prepared.tracks[track.key]
+
+    for (let offset = 0; offset <= plotWidth; offset += pixelStep) {
+      const lambda = waveMin + (offset / plotWidth) * (waveMax - waveMin)
+      const value = valueAtWavelength(prepared.wavelengths, values, lambda)
+      points.push({
+        x: PAD.left + offset,
+        y: yFor(value),
+        strength: value / prepared.max,
+        wavePhase: lambda * 0.052,
+      })
+    }
+
+    return {
+      ...track,
+      trackNumber,
+      points,
+      endY: yFor(valueAtWavelength(prepared.wavelengths, values, waveMax)),
+    }
+  })
+}
+
 export default function SpectrumPlot({ spectrum, mode, loading, error }) {
   const canvasRef = useRef(null)
+  const hoverRef = useRef(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState(null)
   const prepared = useMemo(() => prepareTracks(spectrum, mode), [spectrum, mode])
+
+  function updateHover(nextHover) {
+    hoverRef.current = nextHover
+    setHover(nextHover)
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return undefined
     const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+      const { width, height } = entry.contentRect
+      setSize((current) => (
+        current.width === width && current.height === height ? current : { width, height }
+      ))
     })
     observer.observe(canvas)
     return () => observer.disconnect()
@@ -58,6 +95,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
 
     const xFor = (lambda) => PAD.left + ((lambda - waveMin) / (waveMax - waveMin)) * plotWidth
     const yFor = (value) => PAD.top + plotHeight - (value / (prepared?.max || 1)) * plotHeight * verticalScale
+    const sampledTracks = sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor)
 
     function draw(timestamp = 0) {
       if (!reducedMotion && timestamp - lastDraw < 38) {
@@ -95,43 +133,39 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       context.fillStyle = '#9cb3aa'; context.textAlign = 'right'; context.font = '9px Inter, sans-serif'
       context.fillText('Wavelength  λ  (nm)', size.width - PAD.right, size.height - 2)
 
-      if (prepared) {
-        TRACKS.forEach((track, trackNumber) => {
-          const values = prepared.tracks[track.key]
-          const wavelengths = prepared.wavelengths
-          const pixelStep = Math.max(1, plotWidth / Math.max(500, plotWidth * 1.3))
-          const wobblePhase = timestamp * 0.0008 + trackNumber * 2.1
+      if (sampledTracks.length) {
+        const activeHover = hoverRef.current
+        sampledTracks.forEach((track) => {
+          const wobblePhase = timestamp * 0.0008 + track.trackNumber * 2.1
           context.beginPath()
-          for (let offset = 0; offset <= plotWidth; offset += pixelStep) {
-            const lambda = waveMin + (offset / plotWidth) * (waveMax - waveMin)
-            const value = valueAtWavelength(wavelengths, values, lambda)
-            const strength = value / (prepared.max || 1)
-            const wobble = reducedMotion || strength <= 0.005
+          for (let index = 0; index < track.points.length; index += 1) {
+            const point = track.points[index]
+            const wobble = reducedMotion || point.strength <= 0.005
               ? 0
-              : Math.sin(lambda * 0.052 + wobblePhase) * (0.45 + strength * 1.4)
-            const x = PAD.left + offset
-            const y = yFor(value) + wobble
-            if (offset === 0) context.moveTo(x, y)
-            else context.lineTo(x, y)
+              : Math.sin(point.wavePhase + wobblePhase) * (0.45 + point.strength * 1.4)
+            const y = point.y + wobble
+            if (index === 0) context.moveTo(point.x, y)
+            else context.lineTo(point.x, y)
           }
-          context.lineTo(PAD.left + plotWidth, yFor(valueAtWavelength(wavelengths, values, waveMax)))
+          context.lineTo(PAD.left + plotWidth, track.endY)
           context.strokeStyle = track.color
-          context.lineWidth = trackNumber === 0 ? 1.35 : 1.55
+          context.lineWidth = track.trackNumber === 0 ? 1.35 : 1.55
           context.setLineDash(track.dash ? [4, 5] : [])
           context.shadowColor = track.color
-          context.shadowBlur = hover?.trackKey === track.key ? 16 : 7
-          context.globalAlpha = hover && hover.trackKey !== track.key ? 0.35 : 0.9
+          context.shadowBlur = activeHover?.trackKey === track.key ? 16 : 7
+          context.globalAlpha = activeHover && activeHover.trackKey !== track.key ? 0.35 : 0.9
           context.stroke()
           context.globalAlpha = 1; context.shadowBlur = 0; context.setLineDash([])
         })
       }
 
-      if (hover && prepared) {
-        const x = xFor(hover.lambda)
-        const y = yFor(hover.value)
+      const activeHover = hoverRef.current
+      if (activeHover && prepared) {
+        const x = xFor(activeHover.lambda)
+        const y = yFor(activeHover.value)
         context.strokeStyle = 'rgba(238,249,244,.25)'; context.lineWidth = 1
         context.beginPath(); context.moveTo(x, PAD.top); context.lineTo(x, PAD.top + plotHeight); context.stroke()
-        context.fillStyle = hover.color; context.shadowColor = hover.color; context.shadowBlur = 12
+        context.fillStyle = activeHover.color; context.shadowColor = activeHover.color; context.shadowBlur = 12
         context.beginPath(); context.arc(x, y, 3.2, 0, Math.PI * 2); context.fill(); context.shadowBlur = 0
       }
 
@@ -139,7 +173,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     }
     draw()
     return () => cancelAnimationFrame(frame)
-  }, [prepared, mode, size, hover])
+  }, [prepared, mode, size])
 
   function handlePointer(event) {
     if (!prepared) return
@@ -148,7 +182,8 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const localY = event.clientY - rect.top
     const plotWidth = rect.width - PAD.left - PAD.right
     if (localX < PAD.left || localX > rect.width - PAD.right || localY < PAD.top || localY > rect.height - PAD.bottom) {
-      setHover(null); return
+      updateHover(null)
+      return
     }
     const [waveMin, waveMax] = WAVELENGTH_DOMAIN
     const lambda = waveMin + ((localX - PAD.left) / plotWidth) * (waveMax - waveMin)
@@ -161,7 +196,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       const distance = Math.abs(y - localY)
       if (!closest || distance < closest.distance) closest = { ...track, trackKey: track.key, value, y, distance }
     })
-    setHover({ ...closest, lambda, x: localX, color: closest.color })
+    updateHover({ ...closest, lambda, x: localX, color: closest.color })
   }
 
   const tooltipLeft = hover ? Math.min(size.width - 90, Math.max(92, hover.x)) : 0
@@ -172,7 +207,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       <div className="legend">
         {TRACKS.map((track) => <span className="legend-item" key={track.key}><i className="legend-line" style={{ background: track.color, color: track.color }} />{track.label}</span>)}
       </div>
-      <canvas ref={canvasRef} className="spectrum-canvas" onPointerMove={handlePointer} onPointerLeave={() => setHover(null)} aria-label="Interactive molecular spectrum plot" />
+      <canvas ref={canvasRef} className="spectrum-canvas" onPointerMove={handlePointer} onPointerLeave={() => updateHover(null)} aria-label="Interactive molecular spectrum plot" />
       {loading && <div className="spectrum-loading">Resolving spectrum…</div>}
       {error && <div className="spectrum-loading">{error.message}</div>}
       {hover && (

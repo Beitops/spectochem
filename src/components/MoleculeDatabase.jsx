@@ -1,17 +1,13 @@
 import { Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 
-export default function MoleculeDatabase({ molecules, selectedId, onSelect, className = '' }) {
+function MoleculeDatabase({ molecules, selectedId, onSelect, className = '' }) {
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(80)
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return molecules
-    return molecules.filter((molecule) =>
-      molecule.id.toLowerCase().includes(term)
-      || molecule.chemical_formula.ascii.toLowerCase().includes(term)
-      || molecule.smiles.toLowerCase().includes(term),
-    )
+    return molecules.filter((molecule) => molecule.searchText.includes(term))
   }, [molecules, query])
   useEffect(() => setVisibleCount(80), [query])
   const visible = filtered.slice(0, visibleCount)
@@ -57,3 +53,5 @@ export default function MoleculeDatabase({ molecules, selectedId, onSelect, clas
     </div>
   )
 }
+
+export default memo(MoleculeDatabase)
