@@ -6,8 +6,6 @@ export const TRACKS = [
 
 export const POINTS_PER_TRACK = 5000
 export const HC_EV_NM = 1239.841984
-export const WAVELENGTH_DOMAIN = [200, 1000]
-
 export function decodeSpectrum(buffer, metadata) {
   const expectedBytes = TRACKS.length * POINTS_PER_TRACK * Float32Array.BYTES_PER_ELEMENT
   if (buffer.byteLength !== expectedBytes) {
@@ -45,11 +43,13 @@ export function prepareTracks(spectrum, mode) {
     const source = tracks[key]
     let divisor = 1
     if (mode === 'pdf') {
-      let area = 0
-      for (let i = 1; i < source.length; i += 1) {
-        area += 0.5 * (source[i] + source[i - 1]) * (wavelengths[i] - wavelengths[i - 1])
+      // Shape mode in the reference visualizer compares the profile of each
+      // model independently, with every track's highest point set to 1.
+      let trackMax = 0
+      for (let i = 0; i < source.length; i += 1) {
+        if (source[i] > trackMax) trackMax = source[i]
       }
-      divisor = area || 1
+      divisor = trackMax || 1
     }
     const values = new Float32Array(source.length)
     for (let i = 0; i < source.length; i += 1) {

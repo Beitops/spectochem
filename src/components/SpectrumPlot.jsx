@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatY, prepareTracks, TRACKS, WAVELENGTH_DOMAIN, wavelengthToColor } from '../lib/spectra.js'
+import { formatY, prepareTracks, TRACKS } from '../lib/spectra.js'
 
 const PAD = { left: 58, right: 12, top: 29, bottom: 36 }
 
@@ -12,6 +12,11 @@ function nearestIndex(values, target) {
     else high = mid
   }
   return Math.max(0, Math.min(values.length - 1, low))
+}
+
+function getWavelengthDomain(prepared) {
+  if (!prepared?.wavelengths.length) return [200, 1000]
+  return [prepared.wavelengths[0], prepared.wavelengths[prepared.wavelengths.length - 1]]
 }
 
 export default function SpectrumPlot({ spectrum, mode, loading, error }) {
@@ -42,10 +47,11 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     let lastDraw = 0
     const plotWidth = size.width - PAD.left - PAD.right
     const plotHeight = size.height - PAD.top - PAD.bottom
-    const [waveMin, waveMax] = WAVELENGTH_DOMAIN
+    const [waveMin, waveMax] = getWavelengthDomain(prepared)
+    const verticalScale = mode === 'pdf' ? 1 : 0.9
 
     const xFor = (lambda) => PAD.left + ((lambda - waveMin) / (waveMax - waveMin)) * plotWidth
-    const yFor = (value) => PAD.top + plotHeight - (value / (prepared?.max || 1)) * plotHeight * 0.9
+    const yFor = (value) => PAD.top + plotHeight - (value / (prepared?.max || 1)) * plotHeight * verticalScale
 
     function draw(timestamp = 0) {
       if (!reducedMotion && timestamp - lastDraw < 38) {
@@ -61,16 +67,18 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       context.font = '9px ui-monospace, SFMono-Regular, monospace'
       context.fillStyle = '#6f847c'
       context.strokeStyle = 'rgba(194,232,214,.09)'
-      for (let lambda = 200; lambda <= 1000; lambda += 100) {
+      for (let tick = 0; tick <= 8; tick += 1) {
+        const lambda = waveMin + (tick / 8) * (waveMax - waveMin)
         const x = xFor(lambda)
         context.beginPath(); context.moveTo(x, PAD.top); context.lineTo(x, PAD.top + plotHeight); context.stroke()
-        context.textAlign = 'center'; context.fillText(String(lambda), x, size.height - 15)
+        context.textAlign = 'center'; context.fillText(String(Math.round(lambda)), x, size.height - 15)
       }
       for (let i = 0; i <= 4; i += 1) {
         const y = PAD.top + (i / 4) * plotHeight
         context.beginPath(); context.moveTo(PAD.left, y); context.lineTo(size.width - PAD.right, y); context.stroke()
-        const value = (prepared?.max || 1) * (1 - i / 4) / 0.9
-        context.textAlign = 'right'; context.fillText(formatY(Math.max(0, value), mode), PAD.left - 8, y + 3)
+        const value = (prepared?.max || 1) * (1 - i / 4) / verticalScale
+        const label = mode === 'pdf' ? Math.max(0, value).toFixed(2) : formatY(Math.max(0, value), mode)
+        context.textAlign = 'right'; context.fillText(label, PAD.left - 8, y + 3)
       }
       context.save()
       context.translate(13, PAD.top + plotHeight / 2)
@@ -134,13 +142,15 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     if (localX < PAD.left || localX > rect.width - PAD.right || localY < PAD.top || localY > rect.height - PAD.bottom) {
       setHover(null); return
     }
-    const lambda = WAVELENGTH_DOMAIN[0] + ((localX - PAD.left) / plotWidth) * (WAVELENGTH_DOMAIN[1] - WAVELENGTH_DOMAIN[0])
+    const [waveMin, waveMax] = getWavelengthDomain(prepared)
+    const lambda = waveMin + ((localX - PAD.left) / plotWidth) * (waveMax - waveMin)
     const index = nearestIndex(prepared.wavelengths, lambda)
     const plotHeight = rect.height - PAD.top - PAD.bottom
+    const verticalScale = mode === 'pdf' ? 1 : 0.9
     let closest = null
     TRACKS.forEach((track) => {
       const value = prepared.tracks[track.key][index]
-      const y = PAD.top + plotHeight - (value / prepared.max) * plotHeight * 0.9
+      const y = PAD.top + plotHeight - (value / prepared.max) * plotHeight * verticalScale
       const distance = Math.abs(y - localY)
       if (!closest || distance < closest.distance) closest = { ...track, trackKey: track.key, value, y, distance }
     })

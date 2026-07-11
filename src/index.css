@@ -116,7 +116,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .beam-field { position: absolute; z-index: 0; inset: -45px 22px 10%; width: calc(100% - 44px); height: calc(110% + 45px); opacity: .48; pointer-events: none; filter: blur(.35px); }
 .viewer-wrap { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; }
 .viewer-halo { position: absolute; width: min(42vw, 440px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(168,255,213,.16), rgba(91,124,255,.035) 38%, transparent 68%); filter: blur(12px); animation: breathe 4s ease-in-out infinite; }
-.molecule-viewer { width: min(100%, 620px); height: 100%; min-height: 290px; cursor: grab; }
+.molecule-viewer { position: absolute; inset: 0; width: min(100%, 620px); height: 100%; min-height: 290px; margin-inline: auto; cursor: grab; }
 .molecule-viewer:active { cursor: grabbing; }
 .viewer-note { position: absolute; right: 20px; bottom: 16px; display: flex; align-items: center; gap: 6px; color: var(--ink-faint); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
 

@@ -14,6 +14,7 @@ export default function MoleculeViewer({ molecule }) {
       viewerRef.current.setBackgroundColor(0x000000, 0)
     }
     const viewer = viewerRef.current
+    viewer.resize()
     viewer.clear()
     viewer.addModel(molecule.molblock, 'mol')
     viewer.setStyle({ elem: 'C' }, { stick: { radius: 0.13, color: '#53645e' }, sphere: { scale: 0.26, color: '#60736c' } })
@@ -22,18 +23,22 @@ export default function MoleculeViewer({ molecule }) {
     viewer.setStyle({ elem: 'O' }, { stick: { radius: 0.14, color: '#ff6377' }, sphere: { scale: 0.31, color: '#ff6377' } })
     viewer.setStyle({ elem: 'S' }, { stick: { radius: 0.15, color: '#f4da55' }, sphere: { scale: 0.34, color: '#f4da55' } })
     viewer.setStyle({ not: { elem: ['C', 'H', 'N', 'O', 'S'] } }, { stick: { radius: 0.15, color: '#d7ff68' }, sphere: { scale: 0.35, color: '#d7ff68' } })
-    viewer.zoomTo()
-    viewer.zoom(window.innerWidth < 600 ? 1.15 : 1.35)
+    const centerMolecule = () => {
+      viewer.resize()
+      viewer.zoomTo()
+      viewer.zoom(window.innerWidth < 600 ? 1.15 : 1.35)
+      viewer.render()
+    }
+    centerMolecule()
     viewer.spin('y', 0.45)
-    viewer.render()
-    const resize = () => viewer.resize()
-    window.addEventListener('resize', resize)
-    return () => window.removeEventListener('resize', resize)
+    const resizeObserver = new ResizeObserver(centerMolecule)
+    resizeObserver.observe(hostRef.current)
+    return () => resizeObserver.disconnect()
   }, [molecule])
 
   return (
     <div className="molecule-section">
-      <SpectralBeam molecule={molecule} />
+      <SpectralBeam />
       <div className="viewer-wrap">
         <div className="viewer-halo" />
         <div ref={hostRef} className="molecule-viewer" aria-label={`Rotating 3D structure of ${molecule?.chemical_formula.unicode || 'selected molecule'}`} />
