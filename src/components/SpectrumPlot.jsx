@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatY, prepareTracks, TRACKS, WAVELENGTH_DOMAIN } from '../lib/spectra.js'
 
+// Reserve canvas space for tick labels and axis titles.
 const PAD = { left: 58, right: 12, top: 29, bottom: 36 }
 
 function nearestIndex(values, target) {
+  // Wavelengths are sorted, so binary search is much cheaper than scanning all
+  // 5,000 samples for every canvas point and pointer movement.
   let low = 0
   let high = values.length - 1
   while (low < high) {
@@ -19,6 +22,8 @@ function valueAtWavelength(wavelengths, values, target) {
   if (target < wavelengths[0] || target > wavelengths[last]) return 0
   const upper = nearestIndex(wavelengths, target)
   if (upper === 0 || wavelengths[upper] === target) return values[upper]
+  // Interpolate between neighboring energy-grid samples. This prevents visible
+  // steps after the nonlinear conversion from energy to wavelength.
   const lower = upper - 1
   const span = wavelengths[upper] - wavelengths[lower]
   const mix = span ? (target - wavelengths[lower]) / span : 0
@@ -28,6 +33,8 @@ function valueAtWavelength(wavelengths, values, target) {
 function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
   if (!prepared) return []
 
+  // Drawing roughly one point per screen pixel preserves the curve while
+  // avoiding the cost of tracing all 5,000 source values every frame.
   const pixelStep = Math.max(1, plotWidth / Math.max(500, plotWidth * 1.3))
   return TRACKS.map((track, trackNumber) => {
     const points = []
@@ -55,6 +62,8 @@ function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
 
 export default function SpectrumPlot({ spectrum, mode, loading, error }) {
   const canvasRef = useRef(null)
+  // The animation reads hoverRef without restarting its effect on every pointer
+  // move; hover state separately drives the React tooltip.
   const hoverRef = useRef(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hover, setHover] = useState(null)
@@ -66,6 +75,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
   }
 
   useEffect(() => {
+    // Canvas resolution must follow its responsive CSS size.
     const canvas = canvasRef.current
     if (!canvas) return undefined
     const observer = new ResizeObserver(([entry]) => {
@@ -81,6 +91,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !size.width || !size.height) return undefined
+    // Limit pixel density to control redraw cost on very high-DPI displays.
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     canvas.width = Math.round(size.width * dpr)
     canvas.height = Math.round(size.height * dpr)
@@ -91,6 +102,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const plotWidth = size.width - PAD.left - PAD.right
     const plotHeight = size.height - PAD.top - PAD.bottom
     const [waveMin, waveMax] = WAVELENGTH_DOMAIN
+    // Leave a small amount of headroom above absolute-intensity curves.
     const verticalScale = mode === 'pdf' ? 1 : 0.9
 
     const xFor = (lambda) => PAD.left + ((lambda - waveMin) / (waveMax - waveMin)) * plotWidth
@@ -98,6 +110,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const sampledTracks = sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor)
 
     function draw(timestamp = 0) {
+      // Cap the animated chart near 26 fps; the underlying data is static.
       if (!reducedMotion && timestamp - lastDraw < 38) {
         frame = requestAnimationFrame(draw)
         return
@@ -106,7 +119,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
       context.clearRect(0, 0, size.width, size.height)
 
-      // restrained scientific grid
+      // Draw the axes and restrained scientific grid behind the spectra.
       context.lineWidth = 1
       context.font = '9px ui-monospace, SFMono-Regular, monospace'
       context.fillStyle = '#6f847c'
@@ -136,6 +149,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
       if (sampledTracks.length) {
         const activeHover = hoverRef.current
         sampledTracks.forEach((track) => {
+          // Add a subtle visual shimmer only; point.y remains the true value.
           const wobblePhase = timestamp * 0.0008 + track.trackNumber * 2.1
           context.beginPath()
           for (let index = 0; index < track.points.length; index += 1) {
@@ -161,6 +175,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
 
       const activeHover = hoverRef.current
       if (activeHover && prepared) {
+        // Mark the exact unanimated value, not the decorative wobble position.
         const x = xFor(activeHover.lambda)
         const y = yFor(activeHover.value)
         context.strokeStyle = 'rgba(238,249,244,.25)'; context.lineWidth = 1
@@ -189,6 +204,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     const lambda = waveMin + ((localX - PAD.left) / plotWidth) * (waveMax - waveMin)
     const plotHeight = rect.height - PAD.top - PAD.bottom
     const verticalScale = mode === 'pdf' ? 1 : 0.9
+    // At the pointer wavelength, select whichever track is vertically closest.
     let closest = null
     TRACKS.forEach((track) => {
       const value = valueAtWavelength(prepared.wavelengths, prepared.tracks[track.key], lambda)
@@ -199,6 +215,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
     updateHover({ ...closest, lambda, x: localX, color: closest.color })
   }
 
+  // Clamp the tooltip so it remains inside the chart on narrow screens.
   const tooltipLeft = hover ? Math.min(size.width - 90, Math.max(92, hover.x)) : 0
   const tooltipTop = hover ? Math.max(106, hover.y) : 0
 

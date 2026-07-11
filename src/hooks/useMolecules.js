@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 const INITIAL_STATE = { molecules: [], error: null, loading: true }
 
 function buildMoleculeIndex(metadata) {
+  // Build one lowercase search field up front instead of reconstructing it on
+  // every keystroke. Numeric sorting keeps formulas such as C2 before C10.
   return Object.entries(metadata)
     .map(([id, data]) => ({
       id,
@@ -20,6 +22,8 @@ export function useMolecules() {
   const [state, setState] = useState(INITIAL_STATE)
 
   useEffect(() => {
+    // Metadata is the lightweight startup index; spectra and 3D structures are
+    // downloaded separately only for the selected molecule.
     const controller = new AbortController()
 
     fetch('/data/metadata.json', { signal: controller.signal })

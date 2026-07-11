@@ -6,6 +6,9 @@ export function useSpectrum(molecule) {
 
   useEffect(() => {
     if (!molecule) return undefined
+
+    // Each file contains three consecutive Float32 tracks. decodeSpectrum
+    // validates that binary contract and adds the wavelength coordinates.
     const controller = new AbortController()
     setState({ data: null, loading: true, error: null })
     fetch(`/data/spectrums/${molecule.id}.bin`, { signal: controller.signal })

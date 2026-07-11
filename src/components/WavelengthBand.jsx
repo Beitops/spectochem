@@ -1,4 +1,6 @@
 export default function WavelengthBand() {
+  // These widths correspond to the 100–900 nm chart domain: UV and visible each
+  // occupy 300 nm, while near-infrared occupies the remaining 200 nm.
   return (
     <div className="band-section" aria-label="Electromagnetic wavelength regions from ultraviolet to near-infrared">
       <div className="wavelength-band" />

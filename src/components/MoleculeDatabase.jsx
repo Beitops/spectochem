@@ -4,16 +4,20 @@ import { memo, useEffect, useMemo, useState } from 'react'
 function MoleculeDatabase({ molecules, selectedId, onSelect, className = '' }) {
   const [query, setQuery] = useState('')
   const [visibleCount, setVisibleCount] = useState(80)
+  // Filtering is memoized because the same database is rendered in desktop and
+  // mobile layouts, and the full collection contains thousands of entries.
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
     if (!term) return molecules
     return molecules.filter((molecule) => molecule.searchText.includes(term))
   }, [molecules, query])
   useEffect(() => setVisibleCount(80), [query])
+  // Render the list in batches to keep initial DOM work small.
   const visible = filtered.slice(0, visibleCount)
 
   function handleScroll(event) {
     const element = event.currentTarget
+    // Append the next batch shortly before the visitor reaches the bottom.
     if (element.scrollTop + element.clientHeight > element.scrollHeight - 240) {
       setVisibleCount((count) => Math.min(filtered.length, count + 80))
     }
@@ -54,4 +58,5 @@ function MoleculeDatabase({ molecules, selectedId, onSelect, className = '' }) {
   )
 }
 
+// Parent chart updates should not rerender the database unless its props change.
 export default memo(MoleculeDatabase)

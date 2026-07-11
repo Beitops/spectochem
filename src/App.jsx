@@ -12,12 +12,15 @@ import { useSpectrum } from './hooks/useSpectrum.js'
 import { WAVELENGTH_DOMAIN } from './lib/spectra.js'
 
 export default function App() {
+  // The top-level component owns selections and overlays. Data fetching stays
+  // in hooks so the visual components only receive the data they need.
   const { molecules, error: databaseError, loading } = useMolecules()
   const [selectedId, setSelectedId] = useState(null)
   const [mode, setMode] = useState('pdf')
   const [aboutOpen, setAboutOpen] = useState(false)
   const [databaseOpen, setDatabaseOpen] = useState(false)
 
+  // Automatically show the first molecule until the visitor makes a choice.
   const activeId = selectedId ?? molecules[0]?.id ?? null
   const selected = useMemo(
     () => molecules.find((molecule) => molecule.id === activeId) ?? null,
@@ -34,6 +37,7 @@ export default function App() {
   function selectRandom() {
     if (!molecules.length) return
     let nextIndex = Math.floor(Math.random() * molecules.length)
+    // Avoid making the random button appear broken by selecting the same item.
     if (molecules.length > 1 && molecules[nextIndex].id === activeId) {
       nextIndex = (nextIndex + 1) % molecules.length
     }
@@ -66,6 +70,7 @@ export default function App() {
       </header>
 
       <main className="workspace">
+        {/* Desktop database; the same component is reused in the mobile drawer. */}
         <MoleculeDatabase molecules={molecules} selectedId={activeId} onSelect={selectMolecule} className="database panel" />
         <section className="stage panel">
           <div className="stage-header">

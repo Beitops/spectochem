@@ -1,4 +1,5 @@
 export default function ModeToggle({ mode, onChange }) {
+  // aria-pressed exposes the active display mode to assistive technology.
   return (
     <div className="mode-toggle" role="group" aria-label="Spectrum scale">
       <button className={mode === 'pdf' ? 'active' : ''} onClick={() => onChange('pdf')} aria-pressed={mode === 'pdf'}>PDF</button>

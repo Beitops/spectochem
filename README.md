@@ -2,14 +2,35 @@
 
 An interactive React/Vite frontend for exploring predicted UV–Vis–NIR spectra and rotating 3D molecular structures. The included database contains 2,112 compounds, three 5,000-point spectrum tracks per compound, on-demand RDKit MolBlocks, formulas, SMILES, wavelength bounds, and JSD metrics.
 
-## Run the website
+## Requirements
+
+- Git
+- Node.js 18 or newer (Node.js 20 or 22 LTS is recommended)
+- npm, which is included with Node.js
+
+Python is not required to run the website. The generated molecular and spectrum data is included in `public/data`.
+
+## Clone and run the website
 
 ```bash
-npm install
+git clone <repository-url>
+cd spectochem
+npm ci
 npm run dev
 ```
 
-Create the production build with `npm run build` and preview it with `npm run preview`.
+Open the local URL printed by Vite, normally `http://localhost:5173`.
+
+This project does not require an `.env` file or API keys. Use `npm ci` after cloning so npm installs the exact dependency versions recorded in `package-lock.json`.
+
+## Production build
+
+```bash
+npm run build
+npm run preview
+```
+
+The production files are generated in `dist`. Open the local URL printed by Vite to preview the build.
 
 ## Regenerate frontend data
 
@@ -18,6 +39,7 @@ The repaired exporter is self-contained; it no longer imports private `gjepa` tr
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+# On Windows PowerShell, use: .venv\Scripts\Activate.ps1
 pip install -r scripts/requirements.txt
 python scripts/export_spectra.py --project-root /path/to/training/repository
 ```

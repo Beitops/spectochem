@@ -1,4 +1,5 @@
 export default function SpectralBeam() {
+  // Two copies of the triangular spectrum create a soft glow and a sharper core.
   return (
     <svg className="beam-field" viewBox="0 0 1000 500" preserveAspectRatio="none" aria-hidden="true">
       <defs>

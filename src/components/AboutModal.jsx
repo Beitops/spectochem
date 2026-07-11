@@ -1,6 +1,8 @@
 import { X } from 'lucide-react'
 
 export default function AboutModal({ onClose }) {
+  // The backdrop is a button so mouse, touch, and keyboard users can all close
+  // the dialog without relying on a click handler attached to a plain div.
   return (
     <>
       <button className="drawer-backdrop" onClick={onClose} aria-label="Close about dialog" />

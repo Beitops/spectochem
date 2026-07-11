@@ -2,6 +2,7 @@ import { Rotate3D } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import SpectralBeam from './SpectralBeam.jsx'
 
+// Lazy-load the sizeable 3D library once, when a molecule is first displayed.
 let threeDMolPromise
 
 function loadThreeDMol() {
@@ -22,12 +23,15 @@ export default function MoleculeViewer({ molecule, molblock }) {
       return undefined
     }
 
+    // The import is asynchronous, so guard against finishing after unmount.
     let disposed = false
     let resizeObserver
 
     loadThreeDMol().then(($3Dmol) => {
       if (disposed || !hostRef.current) return
 
+      // Reuse one viewer instance; replacing only its model avoids repeated
+      // WebGL setup when browsing through the database.
       if (!viewerRef.current) {
         viewerRef.current = $3Dmol.createViewer(hostRef.current, {
           backgroundColor: 'rgba(0,0,0,0)',
@@ -47,6 +51,7 @@ export default function MoleculeViewer({ molecule, molblock }) {
       viewer.setStyle({ elem: 'S' }, { stick: { radius: 0.15, color: '#f4da55' }, sphere: { scale: 0.34, color: '#f4da55' } })
       viewer.setStyle({ not: { elem: ['C', 'H', 'N', 'O', 'S'] } }, { stick: { radius: 0.15, color: '#d7ff68' }, sphere: { scale: 0.35, color: '#d7ff68' } })
 
+      // Recenter after responsive layout changes so the molecule remains framed.
       const centerMolecule = () => {
         viewer.resize()
         viewer.zoomTo()

@@ -1,14 +1,21 @@
 :root {
+  /* Typography and foreground hierarchy. */
   --ink: #eef9f4;
   --ink-soft: #9cb3aa;
   --ink-faint: #6f847c;
+
+  /* Application surfaces and borders. */
   --ground: #050908;
   --surface: rgba(12, 25, 21, 0.78);
   --line: rgba(194, 232, 214, 0.13);
   --line-strong: rgba(194, 232, 214, 0.24);
+
+  /* Interactive and spectral accents. */
   --mint: #a8ffd5;
   --mint-soft: #5ee7b1;
   --acid: #d8ff67;
+
+  /* Shared geometry and motion. */
   --radius-lg: 24px;
   --shadow-panel: 0 28px 80px rgba(0, 0, 0, 0.32);
   --header-height: 72px;
