@@ -4,6 +4,20 @@ import { formatY, prepareTracks, TRACKS, WAVELENGTH_DOMAIN } from '../lib/spectr
 
 // Reserve canvas space for tick labels and axis titles.
 const PAD = { left: 58, right: 12, top: 29, bottom: 36 }
+const WOBBLE = {
+  amplitude: 0.85,
+  frameInterval: 1000 / 24,
+  speed: 0.00075,
+}
+
+function wobbleOffset(point, trackNumber, timestamp) {
+  // Two slow, low-amplitude waves avoid a mechanical-looking oscillation.
+  // Weighting by signal strength keeps the scientific baseline stable.
+  const time = timestamp * WOBBLE.speed
+  const phase = point.wavePhase + trackNumber * 1.9
+  const movement = Math.sin(phase + time) + Math.sin(phase * 0.37 - time * 0.61) * 0.35
+  return movement * WOBBLE.amplitude * (0.2 + point.strength * 0.8)
+}
 
 function nearestIndex(values, target) {
   // Wavelengths are sorted, so binary search is much cheaper than scanning all
@@ -65,6 +79,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
   const canvasRef = useRef(null)
   const drawRef = useRef(null)
   const previousViewRef = useRef(null)
+  const isPlotVisibleRef = useRef(true)
   // The animation reads hoverRef without restarting its effect on every pointer
   // move; hover state separately drives the React tooltip.
   const hoverRef = useRef(null)
@@ -90,7 +105,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
     setHover(nextHover)
     // Once the entrance animation has settled, pointer changes still need one
     // canvas redraw to update the highlighted curve and marker.
-    if (drawRef.current) requestAnimationFrame(drawRef.current)
+    if (drawRef.current) drawRef.current()
   }
 
   useEffect(() => {
@@ -109,6 +124,26 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
 
   useEffect(() => {
     const canvas = canvasRef.current
+    if (!canvas) return undefined
+    const resumeAnimation = () => {
+      if (!document.hidden && isPlotVisibleRef.current && drawRef.current) {
+        drawRef.current()
+      }
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      isPlotVisibleRef.current = entry.isIntersecting
+      if (entry.isIntersecting) resumeAnimation()
+    })
+    observer.observe(canvas)
+    document.addEventListener('visibilitychange', resumeAnimation)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', resumeAnimation)
+    }
+  }, [])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
     if (!canvas || !size.width || !size.height) return undefined
     // Limit pixel density to control redraw cost on very high-DPI displays.
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -117,6 +152,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
     const context = canvas.getContext('2d')
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
+    let lastWobbleFrame = 0
     const animationStarted = performance.now()
     const animationDuration = 650
     const plotWidth = size.width - PAD.left - PAD.right
@@ -141,8 +177,18 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
       : null
 
     const isTrackVisible = (trackKey, selection) => !selection || selection === trackKey
+    const scheduleDraw = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(draw)
+    }
 
     function draw(timestamp = 0) {
+      const entranceIsActive = timestamp - animationStarted < animationDuration
+      if (!entranceIsActive && !reducedMotion && timestamp - lastWobbleFrame < WOBBLE.frameInterval) {
+        scheduleDraw()
+        return
+      }
+      lastWobbleFrame = timestamp
       const rawProgress = reducedMotion ? 1 : Math.min(1, (timestamp - animationStarted) / animationDuration)
       // Cubic easing gives the new spectrum a quick, confident start and a
       // gentle finish without continuously animating scientific data.
@@ -197,11 +243,17 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
             const point = track.points[index]
             const previousY = previousTrack?.points[index]?.y ?? point.y
             const animatedY = previousY + (point.y - previousY) * easedProgress
-            if (index === 0) context.moveTo(point.x, animatedY)
-            else context.lineTo(point.x, animatedY)
+            const displayY = animatedY + (reducedMotion ? 0 : wobbleOffset(point, track.trackNumber, timestamp))
+            if (index === 0) context.moveTo(point.x, displayY)
+            else context.lineTo(point.x, displayY)
           }
           const previousEndY = previousTrack?.endY ?? track.endY
-          context.lineTo(PAD.left + plotWidth, previousEndY + (track.endY - previousEndY) * easedProgress)
+          const endPoint = track.points[track.points.length - 1]
+          const endWobble = reducedMotion ? 0 : wobbleOffset(endPoint, track.trackNumber, timestamp)
+          context.lineTo(
+            PAD.left + plotWidth,
+            previousEndY + (track.endY - previousEndY) * easedProgress + endWobble,
+          )
           context.strokeStyle = track.color
           context.lineWidth = track.trackNumber === 0 ? 1.35 : 1.55
           context.setLineDash(track.dash ? [4, 5] : [])
@@ -225,11 +277,13 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
         context.beginPath(); context.arc(x, y, 3.2, 0, Math.PI * 2); context.fill(); context.shadowBlur = 0
       }
 
-      if (rawProgress < 1) frame = requestAnimationFrame(draw)
+      if (rawProgress < 1 || (!reducedMotion && isPlotVisibleRef.current && !document.hidden)) {
+        scheduleDraw()
+      }
     }
     previousViewRef.current = { spectrum, prepared, mode, visibleTrack }
-    drawRef.current = draw
-    frame = requestAnimationFrame(draw)
+    drawRef.current = scheduleDraw
+    scheduleDraw()
     return () => {
       cancelAnimationFrame(frame)
       drawRef.current = null
