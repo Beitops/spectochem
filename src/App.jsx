@@ -95,7 +95,7 @@ export default function App() {
             <div className="spectrum-loading"><FlaskConical size={22} /> {databaseError.message}</div>
           ) : (
             <div className="visualization">
-              <SpectrumPlot spectrum={spectrum.data} mode={mode} loading={spectrum.loading} error={spectrum.error} />
+              <SpectrumPlot spectrum={spectrum.data} jsd={selected?.jsd} mode={mode} loading={spectrum.loading} error={spectrum.error} />
               <WavelengthBand />
               <MoleculeViewer molecule={selected} molblock={molblock.data} />
             </div>

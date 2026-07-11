@@ -61,7 +61,7 @@ function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
   })
 }
 
-export default function SpectrumPlot({ spectrum, mode, loading, error }) {
+export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
   const canvasRef = useRef(null)
   const drawRef = useRef(null)
   // The animation reads hoverRef without restarting its effect on every pointer
@@ -270,6 +270,7 @@ export default function SpectrumPlot({ spectrum, mode, loading, error }) {
           <div className="tooltip-grid">
             <span>λ</span><strong>{hover.lambda.toFixed(2)} nm</strong>
             <span>{mode === 'pdf' ? 'Density' : 'Intensity'}</span><strong>{formatY(hover.value, mode)}</strong>
+            <span>JSD</span><strong>{hover.trackKey === 'groundTruth' ? 'Reference' : jsd?.[hover.trackKey === 'schnet' ? 'SchNet' : 'GAT']?.toFixed(4) ?? '—'}</strong>
           </div>
         </div>
       )}
