@@ -64,6 +64,7 @@ function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
 export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
   const canvasRef = useRef(null)
   const drawRef = useRef(null)
+  const previousViewRef = useRef(null)
   // The animation reads hoverRef without restarting its effect on every pointer
   // move; hover state separately drives the React tooltip.
   const hoverRef = useRef(null)
@@ -116,22 +117,36 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
     const animationStarted = performance.now()
-    const animationDuration = 900
+    const animationDuration = 650
     const plotWidth = size.width - PAD.left - PAD.right
     const plotHeight = size.height - PAD.top - PAD.bottom
     const [waveMin, waveMax] = WAVELENGTH_DOMAIN
     // Leave a small amount of headroom above absolute-intensity curves.
     const verticalScale = mode === 'pdf' ? 1 : 0.9
 
+    const previousView = previousViewRef.current
+    const isSameSpectrum = previousView?.spectrum === spectrum
+    const isModeTransition = isSameSpectrum && previousView.mode !== mode
+    const isVisibilityTransition = isSameSpectrum && previousView.visibleTrack !== visibleTrack
+
     const xFor = (lambda) => PAD.left + ((lambda - waveMin) / (waveMax - waveMin)) * plotWidth
     const yFor = (value) => PAD.top + plotHeight - (value / (prepared?.max || 1)) * plotHeight * verticalScale
     const sampledTracks = sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor)
+    const previousVerticalScale = previousView?.mode === 'pdf' ? 1 : 0.9
+    const previousYFor = (value) => PAD.top + plotHeight
+      - (value / (previousView?.prepared?.max || 1)) * plotHeight * previousVerticalScale
+    const previousTracks = isModeTransition
+      ? sampleTracks(previousView.prepared, plotWidth, waveMin, waveMax, previousYFor)
+      : null
+
+    const isTrackVisible = (trackKey, selection) => !selection || selection === trackKey
 
     function draw(timestamp = 0) {
       const rawProgress = reducedMotion ? 1 : Math.min(1, (timestamp - animationStarted) / animationDuration)
       // Cubic easing gives the new spectrum a quick, confident start and a
       // gentle finish without continuously animating scientific data.
-      const revealProgress = 1 - Math.pow(1 - Math.max(0, rawProgress), 3)
+      const easedProgress = 1 - Math.pow(1 - Math.max(0, rawProgress), 3)
+      const revealProgress = isSameSpectrum ? 1 : easedProgress
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
       context.clearRect(0, 0, size.width, size.height)
 
@@ -165,7 +180,13 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
       if (sampledTracks.length) {
         const activeHover = hoverRef.current
         sampledTracks.forEach((track) => {
-          if (visibleTrack && track.key !== visibleTrack) return
+          const previousTrack = previousTracks?.[track.trackNumber]
+          const startAlpha = isVisibilityTransition
+            ? Number(isTrackVisible(track.key, previousView.visibleTrack))
+            : Number(isTrackVisible(track.key, visibleTrack))
+          const endAlpha = Number(isTrackVisible(track.key, visibleTrack))
+          const visibilityAlpha = startAlpha + (endAlpha - startAlpha) * easedProgress
+          if (visibilityAlpha <= 0.001) return
           context.save()
           context.beginPath()
           context.rect(PAD.left, PAD.top - 20, plotWidth * revealProgress, plotHeight + 40)
@@ -173,16 +194,19 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
           context.beginPath()
           for (let index = 0; index < track.points.length; index += 1) {
             const point = track.points[index]
-            if (index === 0) context.moveTo(point.x, point.y)
-            else context.lineTo(point.x, point.y)
+            const previousY = previousTrack?.points[index]?.y ?? point.y
+            const animatedY = previousY + (point.y - previousY) * easedProgress
+            if (index === 0) context.moveTo(point.x, animatedY)
+            else context.lineTo(point.x, animatedY)
           }
-          context.lineTo(PAD.left + plotWidth, track.endY)
+          const previousEndY = previousTrack?.endY ?? track.endY
+          context.lineTo(PAD.left + plotWidth, previousEndY + (track.endY - previousEndY) * easedProgress)
           context.strokeStyle = track.color
           context.lineWidth = track.trackNumber === 0 ? 1.35 : 1.55
           context.setLineDash(track.dash ? [4, 5] : [])
           context.shadowColor = track.color
           context.shadowBlur = activeHover?.trackKey === track.key ? 16 : 7
-          context.globalAlpha = activeHover && activeHover.trackKey !== track.key ? 0.35 : 0.9
+          context.globalAlpha = visibilityAlpha * (activeHover && activeHover.trackKey !== track.key ? 0.35 : 0.9)
           context.stroke()
           context.globalAlpha = 1; context.shadowBlur = 0; context.setLineDash([])
           context.restore()
@@ -202,6 +226,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
 
       if (rawProgress < 1) frame = requestAnimationFrame(draw)
     }
+    previousViewRef.current = { spectrum, prepared, mode, visibleTrack }
     drawRef.current = draw
     frame = requestAnimationFrame(draw)
     return () => {
