@@ -76,6 +76,7 @@ function sampleTracks(prepared, plotWidth, waveMin, waveMax, yFor) {
 }
 
 export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
+  const chartRef = useRef(null)
   const canvasRef = useRef(null)
   const drawRef = useRef(null)
   const previousViewRef = useRef(null)
@@ -94,8 +95,15 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
     strategy: 'fixed',
     middleware: [
       offset(14),
-      flip({ fallbackPlacements: ['left-start', 'right-end', 'left-end'] }),
-      shift({ padding: 10 }),
+      flip(() => ({
+        boundary: chartRef.current ?? 'clippingAncestors',
+        fallbackPlacements: ['left-start', 'right-end', 'left-end'],
+      })),
+      shift(() => ({
+        boundary: chartRef.current ?? 'clippingAncestors',
+        crossAxis: true,
+        padding: 10,
+      })),
     ],
     whileElementsMounted: autoUpdate,
   })
@@ -348,7 +356,7 @@ export default function SpectrumPlot({ spectrum, jsd, mode, loading, error }) {
   }
 
   return (
-    <div className="chart-section">
+    <div ref={chartRef} className="chart-section">
       <div className="legend">
         {TRACKS.map((track) => (
           <button
